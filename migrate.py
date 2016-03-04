@@ -20,7 +20,6 @@
 from __future__ import print_function
 import argparse
 import getpass
-import json
 import logging
 import pprint
 import re
@@ -43,7 +42,7 @@ except (ImportError, AssertionError):
 
 def read_arguments():
     parser = argparse.ArgumentParser(
-        description = "A tool to migrate issues from Bitbucket to GitHub."
+        description="A tool to migrate issues from Bitbucket to GitHub."
     )
 
     parser.add_argument(
@@ -138,9 +137,7 @@ def load_issues(store, options):
             )
 
 def main(options):
-    """
-    Main entry point for the script.
-    """
+    """Main entry point for the script."""
     if options.debug:
         logging.basicConfig(level=logging.DEBUG)
     # Always need the GH pass so format_user() can verify links to GitHub user
@@ -236,6 +233,7 @@ def format_user(user, gh_auth, store):
     """
     Format a Bitbucket user's info into a string containing either 'Anonymous'
     or their name and links to their Bitbucket and GitHub profiles.
+
     The GitHub profile link may be incorrect because it assumes they reused
     their Bitbucket username on GitHub.
     """
@@ -275,9 +273,7 @@ def format_user(user, gh_auth, store):
 
 
 def convert_date(bb_date):
-    """
-    Convert the date from Bitbucket format to GitHub format
-    """
+    """Convert the date from Bitbucket format to GitHub format."""
     # '2016-02-15T18:09:50.343889+00:00'
     m = re.search(ur'(\d\d\d\d-\d\d-\d\d)T(\d\d:\d\d:\d\d)', bb_date)
     if m:
@@ -302,9 +298,10 @@ def convert_changesets(content):
 
 def convert_creole_braces(content):
     """
-    Convert Creole code blocks that are wrapped in "{{{" and "}}}" to standard
-    Markdown code formatting using "`" for inline code and four-space
-    indentation for code blocks.
+    Convert Creole code blocks to Markdown formatting.
+
+    Convert text wrapped in "{{{" and "}}}" to "`" for inline code and
+    four-space indentation for multi-line code blocks.
     """
     lines = []
     in_block = False
@@ -328,7 +325,7 @@ def convert_creole_braces(content):
 
 def convert_links(content, options, store):
     """
-    Convert explicit links found in the body of a comment or issue to use
+    Convert absolute links to other issues related to this repository to
     relative links ("#<id>").
     """
     def map_pr(match):
@@ -378,12 +375,12 @@ def push_github_issue(issue_data, github_repo, auth, headers):
 
 def verify_github_issue_import_finished(status_url, github_repo, github_id, auth, headers):
     """
-    Checks the status of a GitHub issue import. If the status is 'pending',
-    it sleeps, then rechecks until the status is either 'imported' or 'failed'.
+    Check the status of a GitHub issue import.
+
+    If the status is 'pending', it sleeps, then rechecks until the status is
+    either 'imported' or 'failed'.
     """
-    expected_url = 'https://api.github.com/repos/{repo}/issues/{id}'.format(
-        repo=github_repo, id=github_id)
-    while True: # keep checking until status is something other than 'pending'
+    while True:  # keep checking until status is something other than 'pending'
         respo = requests.get(status_url, auth=auth, headers=headers)
         if respo.status_code != 200:
             if respo.status_code == 404:
