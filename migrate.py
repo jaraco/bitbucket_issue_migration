@@ -382,6 +382,8 @@ def verify_github_issue_import_finished(status_url, github_repo, github_id, auth
     If the status is 'pending', it sleeps, then rechecks until the status is
     either 'imported' or 'failed'.
     """
+    expected_url = 'https://api.github.com/repos/{repo}/issues/{id}'.format(
+        repo=github_repo, id=github_id)
     while True:  # keep checking until status is something other than 'pending'
         respo = requests.get(status_url, auth=auth, headers=headers)
         if respo.status_code != 200:
