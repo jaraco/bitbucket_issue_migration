@@ -17,7 +17,8 @@
 # If not, see <http://www.gnu.org/licenses/>.
 
 
-from __future__ import print_function
+from __future__ import print_function, unicode_literals
+
 import argparse
 import getpass
 import logging
@@ -106,7 +107,7 @@ def load_issues(store, options):
                 raise RuntimeError('Unable to resume: signature does not match')
         with issues_zip.open('db-1.0.json') as db_file:
             issues = json.load(db_file)
-    for issue in issues[u'issues']:
+    for issue in issues['issues']:
         labels = [issue['priority']]
         for k in ['component', 'kind', 'milestone', 'version']:
             v = issue.get(k)
@@ -114,25 +115,25 @@ def load_issues(store, options):
                 labels.append(v)
         Issue(
             store=store,
-            bitbucket_id=issue[u'id'],
-            title=issue[u'title'],
-            body=issue[u'content'],
-            closed=issue[u'status'] not in (u'open', u'new'),
-            created_at=convert_date(issue[u'created_on']),
+            bitbucket_id=issue['id'],
+            title=issue['title'],
+            body=issue['content'],
+            closed=issue['status'] not in ('open', 'new'),
+            created_at=convert_date(issue['created_on']),
             labels=labels,
         ).original_issue = issue
     for n, issue in enumerate(store.query(Issue, sort=Issue.bitbucket_id.asc), 1):
         issue.github_id = n
     for issue in store.query(Issue):
         issue.body = format_issue_body(issue, options, store)
-    for comment in issues[u'comments']:
-        if comment[u'content']:
+    for comment in issues['comments']:
+        if comment['content']:
             issue = store.findUnique(
-                Issue, Issue.bitbucket_id == comment[u'issue'])
+                Issue, Issue.bitbucket_id == comment['issue'])
             Comment(
                 store=store,
                 issue=issue,
-                created_at=convert_date(comment[u'created_on']),
+                created_at=convert_date(comment['created_on']),
                 body=format_comment_body(comment, options, store),
             )
 
@@ -189,10 +190,10 @@ def main(options):
 
 
 def format_issue_body(issue, options, store):
-    content = convert_changesets(issue.original_issue[u'content'])
+    content = convert_changesets(issue.original_issue['content'])
     content = convert_creole_braces(content)
     content = convert_links(content, options, store)
-    return u"""Originally reported by: **{reporter}**
+    return """Originally reported by: **{reporter}**
 
 {sep}
 
@@ -203,10 +204,10 @@ def format_issue_body(issue, options, store):
 """.format(
         # anonymous issues are missing 'reported_by' key
         reporter=format_user(
-            issue.original_issue.get(u'reporter', None),
+            issue.original_issue.get('reporter', None),
             options.gh_auth,
             store),
-        sep=u'-' * 40,
+        sep='-' * 40,
         content=content,
         repo=options.bitbucket_repo,
         id=issue.bitbucket_id,
@@ -214,16 +215,16 @@ def format_issue_body(issue, options, store):
 
 
 def format_comment_body(comment, options, store):
-    content = convert_changesets(comment[u'content'])
+    content = convert_changesets(comment['content'])
     content = convert_creole_braces(content)
     content = convert_links(content, options, store)
-    return u"""*Original comment by* **{author}**:
+    return """*Original comment by* **{author}**:
 
 {sep}
 
 {content}
 """.format(
-        author=format_user(comment[u'user'], options.gh_auth, store),
+        author=format_user(comment['user'], options.gh_auth, store),
         sep='-' * 40,
         content=content
     )
@@ -240,19 +241,19 @@ def format_user(user, gh_auth, store):
     # anonymous comments have null 'author_info', anonymous issues don't have
     # 'reported_by' key, so just be sure to pass in None
     if user is None:
-        return u"Anonymous"
+        return "Anonymous"
     u = store.findUnique(User, User.user == user, None)
     if u is not None:
         return u.name
-    bb_user = u"Bitbucket: [{0}](http://bitbucket.org/{0})".format(user)
+    bb_user = "Bitbucket: [{0}](http://bitbucket.org/{0})".format(user)
     # Verify GH user link doesn't 404. Unfortunately can't use
     # https://github.com/<name> because it might be an organization
-    gh_user_url = (u'https://api.github.com/users/' + user)
+    gh_user_url = ('https://api.github.com/users/' + user)
     status_code = requests.head(gh_user_url, auth=gh_auth).status_code
     if status_code == 200:
-        gh_user = u"GitHub: [{0}](http://github.com/{0})".format(user)
+        gh_user = "GitHub: [{0}](http://github.com/{0})".format(user)
     elif status_code == 404:
-        gh_user = u"GitHub: Unknown"
+        gh_user = "GitHub: Unknown"
     elif status_code == 403:
         raise RuntimeError(
             "GitHub returned HTTP Status Code 403 Forbidden when accessing: {}."
@@ -267,7 +268,7 @@ def format_user(user, gh_auth, store):
             "unexpected HTTP status code: {}"
             .format(gh_user_url, status_code)
         )
-    name = user + u" (" + bb_user + u", " + gh_user + u")"
+    name = user + " (" + bb_user + ", " + gh_user + ")"
     User(store=store, user=user, name=name)
     return name
 
@@ -275,9 +276,9 @@ def format_user(user, gh_auth, store):
 def convert_date(bb_date):
     """Convert the date from Bitbucket format to GitHub format."""
     # '2016-02-15T18:09:50.343889+00:00'
-    m = re.search(ur'(\d\d\d\d-\d\d-\d\d)T(\d\d:\d\d:\d\d)', bb_date)
+    m = re.search(r'(\d\d\d\d-\d\d-\d\d)T(\d\d:\d\d:\d\d)', bb_date)
     if m:
-        return u'{}T{}Z'.format(m.group(1), m.group(2))
+        return '{}T{}Z'.format(m.group(1), m.group(2))
 
     raise RuntimeError("Could not parse date: {}".format(bb_date))
 
@@ -292,8 +293,8 @@ def convert_changesets(content):
     to git hashes, better to remove them altogether.
     """
     lines = content.splitlines()
-    filtered_lines = [l for l in lines if not l.startswith(u"→ <<cset")]
-    return u"\n".join(filtered_lines)
+    filtered_lines = [l for l in lines if not l.startswith("→ <<cset")]
+    return "\n".join(filtered_lines)
 
 
 def convert_creole_braces(content):
@@ -306,21 +307,21 @@ def convert_creole_braces(content):
     lines = []
     in_block = False
     for line in content.splitlines():
-        if line.startswith(u"{{{") or line.startswith(u"}}}"):
-            if u"{{{" in line:
-                _, _, after = line.partition(u"{{{")
-                lines.append(u'    ' + after)
+        if line.startswith("{{{") or line.startswith("}}}"):
+            if "{{{" in line:
+                _, _, after = line.partition("{{{")
+                lines.append('    ' + after)
                 in_block = True
-            if u"}}}" in line:
-                before, _, _ = line.partition(u"}}}")
-                lines.append(u'    ' + before)
+            if "}}}" in line:
+                before, _, _ = line.partition("}}}")
+                lines.append('    ' + before)
                 in_block = False
         else:
             if in_block:
-                lines.append(u"    " + line)
+                lines.append("    " + line)
             else:
-                lines.append(line.replace(u"{{{", u"`").replace(u"}}}", u"`"))
-    return u"\n".join(lines)
+                lines.append(line.replace("{{{", "`").replace("}}}", "`"))
+    return "\n".join(lines)
 
 
 def convert_links(content, options, store):
@@ -329,12 +330,12 @@ def convert_links(content, options, store):
     relative links ("#<id>").
     """
     def map_pr(match):
-        return u'pull request [#{bitbucket_id}](https://bitbucket.org/{repo}/pull-requests/{bitbucket_id})'.format(
-            bitbucket_id=match.group(u'bitbucket_id'),
+        return 'pull request [#{bitbucket_id}](https://bitbucket.org/{repo}/pull-requests/{bitbucket_id})'.format(
+            bitbucket_id=match.group('bitbucket_id'),
             repo=options.bitbucket_repo)
-    content = re.sub(ur'pull request #(?P<bitbucket_id>\d+)', map_pr, content)
+    content = re.sub(r'pull request #(?P<bitbucket_id>\d+)', map_pr, content)
     def map_id(match):
-        bitbucket_id = int(match.group(u'bitbucket_id'))
+        bitbucket_id = int(match.group('bitbucket_id'))
         issue = store.findUnique(
             Issue, Issue.bitbucket_id == bitbucket_id, None)
         #print match, bitbucket_id, issue
@@ -342,8 +343,8 @@ def convert_links(content, options, store):
             github_id = bitbucket_id
         else:
             github_id = issue.github_id
-        return u'#{}'.format(github_id)
-    return re.sub(ur'#(?P<bitbucket_id>\d+)', map_id, content)
+        return '#{}'.format(github_id)
+    return re.sub(r'#(?P<bitbucket_id>\d+)', map_id, content)
 
 
 def push_github_issue(issue_data, github_repo, auth, headers):
@@ -364,12 +365,12 @@ def push_github_issue(issue_data, github_repo, auth, headers):
         raise RuntimeError(
             "Initial import validation failed for issue '{}' due to the "
             "following errors:\n{}".format(
-                issue_data[u'issue'][u'title'], respo.json())
+                issue_data['issue']['title'], respo.json())
         )
     else:
         raise RuntimeError(
             "Failed to POST issue: '{}' due to unexpected HTTP status code: {}"
-            .format(issue_data[u'issue'][u'title'], respo.status_code)
+            .format(issue_data['issue']['title'], respo.status_code)
         )
 
 
@@ -386,30 +387,30 @@ def verify_github_issue_import_finished(status_url, github_repo, github_id, auth
             if respo.status_code == 404:
                 # GitHub sometimes gives us a status url that doesn't work;
                 # we'll do our own polling to recover.
-                status = u'fallback'
+                status = 'fallback'
                 break
             raise RuntimeError(
                 "Failed to check GitHub issue import status url: {} due to "
                 "unexpected HTTP status code: {}"
                 .format(status_url, respo.status_code)
             )
-        status = respo.json()[u'status']
-        if status != u'pending':
+        status = respo.json()['status']
+        if status != 'pending':
             break
         time.sleep(1)
-    if status == u'imported':
-        imported_url = respo.json()[u'issue_url']
+    if status == 'imported':
+        imported_url = respo.json()['issue_url']
         if imported_url != expected_url:
             raise RuntimeError(
                 "Consistency failure importing issue:\n"
                 "Expected URL: {}\n"
                 "Imported URL: {}".format(expected_url, imported_url))
-        print("Imported Issue:", respo.json()[u'issue_url'])
-    elif status == u'fallback':
+        print("Imported Issue:", respo.json()['issue_url'])
+    elif status == 'fallback':
         while not check_issue_exists(github_repo, github_id, auth):
             time.sleep(1)
         print("Probably imported issue:", expected_url)
-    elif status == u'failed':
+    elif status == 'failed':
         raise RuntimeError(
             "Failed to import GitHub issue due to the following errors:\n{}"
             .format(respo.json())
