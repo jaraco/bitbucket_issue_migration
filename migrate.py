@@ -148,16 +148,15 @@ def main(options):
     options.gh_auth = (options.github_username, github_password)
     # Verify GH creds work
     gh_repo_url = 'https://api.github.com/repos/' + options.github_repo
-    gh_repo_status = requests.head(gh_repo_url, auth=options.gh_auth).status_code
+    request_call = functools.partial(requests.head, gh_repo_url,
+        auth=options.gh_auth)
+    gh_repo_status = handle_github(request_call).status_code
     if gh_repo_status == 401:
         raise RuntimeError("Failed to login to GitHub.")
     elif gh_repo_status == 403:
         raise RuntimeError(
-            "GitHub login succeeded, but user '{}' either doesn't have "
-            "permission to access the repo at: {}\n"
-            "or is over their GitHub API rate limit.\n"
-            "You can read more about GitHub's API rate limiting policies here: "
-            "https://developer.github.com/v3/#rate-limiting"
+            "GitHub login succeeded, but user '{}' doesn't have "
+            "permission to access the repo at {}."
             .format(options.github_username, gh_repo_url)
         )
     elif gh_repo_status == 404:
@@ -383,8 +382,8 @@ def handle_github(request_call):
     resp = request_call()
     hit_rate_limit = (
         resp.status_code == 403 and
-        'X-RateLimitRemaining' in resp.headers and
-        int(resp.headers['X-RateLimitRemaining']) == 0
+        'X-RateLimit-Remaining' in resp.headers and
+        int(resp.headers['X-RateLimit-Remaining']) == 0
     )
     if hit_rate_limit:
         reset_time = int(resp.headers['X-RateLimit-Reset'])
