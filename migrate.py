@@ -23,6 +23,7 @@ import re
 import requests
 import sys
 import time
+import functools
 
 try:
     import keyring
@@ -378,6 +379,22 @@ def format_comment_body(comment, options):
     )
 
 
+def handle_github(request_call):
+    resp = request_call()
+    hit_rate_limit = (
+        resp.status_code == 403 and
+        'X-RateLimitRemaining' in resp.headers and
+        int(resp.headers['X-RateLimitRemaining']) == 0
+    )
+    if hit_rate_limit:
+        reset_time = int(resp.headers['X-RateLimit-Reset'])
+        wait = reset_time - time.time()
+        print("Rate limit reached, waiting", wait, "seconds")
+        time.sleep(wait)
+        return handle_github(request_call)
+    return resp
+
+
 def format_user(user, gh_auth):
     """
     Format a Bitbucket user's info into a string containing either 'Anonymous'
@@ -394,7 +411,8 @@ def format_user(user, gh_auth):
     # Verify GH user link doesn't 404. Unfortunately can't use
     # https://github.com/<name> because it might be an organization
     gh_user_url = ('https://api.github.com/users/' + user['username'])
-    status_code = requests.head(gh_user_url, auth=gh_auth).status_code
+    request_call = functools.partial(requests.head, gh_user_url, auth=gh_auth)
+    status_code = handle_github(request_call).status_code
     if status_code == 200:
         gh_user = "GitHub: [{0}](http://github.com/{0})".format(user['username'])
     elif status_code == 404:
@@ -402,9 +420,6 @@ def format_user(user, gh_auth):
     elif status_code == 403:
         raise RuntimeError(
             "GitHub returned HTTP Status Code 403 Forbidden when accessing: {}."
-            "\nThis may be due to rate limiting.\n"
-            "You can read more about GitHub's API rate limiting policies here: "
-            "https://developer.github.com/v3/#rate-limiting"
             .format(gh_user_url)
         )
     else:
@@ -489,7 +504,9 @@ def push_github_issue(issue, comments, github_repo, auth, headers):
     issue_data = {'issue': issue, 'comments': comments}
     url = 'https://api.github.com/repos/{repo}/import/issues'.format(
         repo=github_repo)
-    respo = requests.post(url, json=issue_data, auth=auth, headers=headers)
+    request_call = functools.partial(requests.post, url, json=issue_data,
+        auth=auth, headers=headers)
+    respo = handle_github(request_call)
     if respo.status_code == 202:
         return respo
     elif respo.status_code == 422:
@@ -512,7 +529,9 @@ def verify_github_issue_import_finished(status_url, auth, headers):
     either 'imported' or 'failed'.
     """
     while True:  # keep checking until status is something other than 'pending'
-        respo = requests.get(status_url, auth=auth, headers=headers)
+        request_call = functools.partial(requests.get, status_url,
+            auth=auth, headers=headers)
+        respo = handle_github(request_call)
         if respo.status_code == 404:
             print("404 retrieving status URL", status_url)
             return
